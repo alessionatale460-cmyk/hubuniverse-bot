@@ -376,6 +376,355 @@ known_players: set = set()
 linked_players: dict = {}  # discord_id -> minecraft_name
 
 # ══════════════════════════════════════════════
+# MILESTONE SYSTEM
+# ══════════════════════════════════════════════
+import random
+
+# Points per player: { uuid: int }
+player_points: dict = {}
+
+# Current active event: None or dict
+current_event: dict = None
+# Snapshot of stats at event start: { uuid: { mined, mob_kills, crafted } }
+event_baseline: dict = {}
+# Progress during event: { uuid: int }
+event_progress: dict = {}
+
+EVENT_HOURS = [8, 14, 19, 0]  # UTC hours when events start
+
+EVENT_TYPES = [
+    {
+        "type": "mined",
+        "emoji": "⛏️",
+        "name": "Mining Frenzy",
+        "description": "Mine as many blocks as possible!",
+        "goal_range": (200, 500),
+        "unit": "blocks mined",
+        "points_per_unit": 1,
+    },
+    {
+        "type": "mob_kills",
+        "emoji": "⚔️",
+        "name": "Monster Hunt",
+        "description": "Kill as many mobs as possible!",
+        "goal_range": (50, 150),
+        "unit": "mobs killed",
+        "points_per_unit": 2,
+    },
+    {
+        "type": "crafted",
+        "emoji": "🔨",
+        "name": "Crafting Rush",
+        "description": "Craft as many items as possible!",
+        "goal_range": (100, 300),
+        "unit": "items crafted",
+        "points_per_unit": 1,
+    },
+]
+
+def generate_event() -> dict:
+    template = random.choice(EVENT_TYPES)
+    goal = random.randint(*template["goal_range"])
+    now = datetime.datetime.utcnow()
+    end_time = now + datetime.timedelta(hours=1)
+    return {
+        **template,
+        "goal": goal,
+        "start": now,
+        "end": end_time,
+        "message_id": None,
+    }
+
+async def start_milestone_event():
+    global current_event, event_baseline, event_progress
+    current_event = generate_event()
+    event_progress = {}
+
+    # Take baseline snapshot
+    loop = asyncio.get_event_loop()
+    players = await loop.run_in_executor(None, fetch_all_players)
+    event_baseline = {p["uuid"]: p.get(current_event["type"], 0) for p in players}
+
+    # Announce in #events
+    ch = bot.get_channel(CHANNEL_EVENTS)
+    if not ch:
+        return
+
+    end_ts = int(current_event["end"].timestamp())
+    embed = discord.Embed(
+        title=f"{current_event['emoji']} Community Event — {current_event['name']}",
+        description=current_event["description"],
+        color=0xF1C40F,
+        timestamp=datetime.datetime.utcnow()
+    )
+    embed.add_field(name="🎯 Goal", value=f"Reach **{current_event['goal']} {current_event['unit']}** as a community!", inline=False)
+    embed.add_field(name="⏰ Ends", value=f"<t:{end_ts}:R>", inline=True)
+    embed.add_field(name="🪙 Points", value=f"**{current_event['points_per_unit']} point** per {current_event['unit'].split()[-1]}", inline=True)
+    embed.set_footer(text="Progress updates every 5 minutes")
+
+    msg = await ch.send("@everyone 🎉 A new community event has started!", embed=embed)
+    current_event["message_id"] = msg.id
+    print(f"[EVENT] Started: {current_event['name']}")
+
+async def update_milestone_progress():
+    global event_progress
+    if not current_event:
+        return
+
+    loop = asyncio.get_event_loop()
+    players = await loop.run_in_executor(None, fetch_all_players)
+
+    total = 0
+    for p in players:
+        baseline = event_baseline.get(p["uuid"], p.get(current_event["type"], 0))
+        progress = max(0, p.get(current_event["type"], 0) - baseline)
+        event_progress[p["uuid"]] = {"name": p["name"], "progress": progress}
+        total += progress
+
+    # Update event embed
+    ch = bot.get_channel(CHANNEL_EVENTS)
+    if ch and current_event.get("message_id"):
+        try:
+            msg = await ch.fetch_message(current_event["message_id"])
+            end_ts = int(current_event["end"].timestamp())
+            pct = min(int((total / current_event["goal"]) * 20), 20)
+            bar = "█" * pct + "░" * (20 - pct)
+            progress_pct = round((total / current_event["goal"]) * 100) if current_event["goal"] > 0 else 0
+
+            embed = discord.Embed(
+                title=f"{current_event['emoji']} Community Event — {current_event['name']}",
+                description=current_event["description"],
+                color=0xF1C40F,
+                timestamp=datetime.datetime.utcnow()
+            )
+            embed.add_field(name="🎯 Goal", value=f"**{total}/{current_event['goal']} {current_event['unit']}**", inline=False)
+            embed.add_field(name="📊 Progress", value=f"`{bar}` {progress_pct}%", inline=False)
+            embed.add_field(name="⏰ Ends", value=f"<t:{end_ts}:R>", inline=True)
+            embed.add_field(name="🪙 Points", value=f"**{current_event['points_per_unit']} point** per {current_event['unit'].split()[-1]}", inline=True)
+            embed.set_footer(text="Progress updates every 5 minutes")
+            await msg.edit(embed=embed)
+        except Exception as e:
+            print(f"[EVENT] Progress update error: {e}")
+
+async def end_milestone_event():
+    global current_event, event_baseline, event_progress, player_points
+
+    if not current_event:
+        return
+
+    # Sort by progress
+    results = sorted(event_progress.values(), key=lambda x: x["progress"], reverse=True)
+    total = sum(r["progress"] for r in results)
+    goal_reached = total >= current_event["goal"]
+
+    # Award points by ranking
+    RANK_POINTS = [50, 30, 15]
+    PARTICIPATION_POINTS = 5
+    uuid_list = [uuid for uuid, data in sorted(event_progress.items(), key=lambda x: x[1]["progress"], reverse=True) if data["progress"] > 0]
+    
+    awarded = {}
+    for i, uuid in enumerate(uuid_list):
+        pts = RANK_POINTS[i] if i < 3 else PARTICIPATION_POINTS
+        player_points[uuid] = player_points.get(uuid, 0) + pts
+        awarded[uuid] = pts
+    save_points_ftp()
+
+    # Post result in #announcements
+    ch = bot.get_channel(CHANNEL_ANNOUNCEMENTS)
+    if ch:
+        medals = ["🥇", "🥈", "🥉"]
+        top_lines = ""
+        for i, r in enumerate(results[:3]):
+            if r["progress"] == 0:
+                break
+            uuid_entry = next((u for u, d in event_progress.items() if d["name"] == r["name"]), None)
+            pts = awarded.get(uuid_entry, 0)
+            top_lines += f"{medals[i]} **{r['name']}** — {r['progress']} {current_event['unit']} (+{pts} pts)\n"
+
+        status = "✅ Goal reached! Amazing work!" if goal_reached else f"❌ Goal not reached ({total}/{current_event['goal']})"
+        embed = discord.Embed(
+            title=f"{current_event['emoji']} Event Results — {current_event['name']}",
+            description=status,
+            color=0x2ECC71 if goal_reached else 0xE74C3C,
+            timestamp=datetime.datetime.utcnow()
+        )
+        embed.add_field(name="📊 Total", value=f"**{total} {current_event['unit']}**", inline=True)
+        embed.add_field(name="🎯 Goal", value=f"**{current_event['goal']} {current_event['unit']}**", inline=True)
+        if top_lines:
+            embed.add_field(name="🏆 Top Players", value=top_lines, inline=False)
+        embed.add_field(name="🪙 Points awarded", value="🥇 50pts · 🥈 30pts · 🥉 15pts · Others 5pts", inline=False)
+        embed.set_footer(text="Use /shop in #bot-commands to spend your points!")
+        await ch.send(embed=embed)
+
+    print(f"[EVENT] Ended: {current_event['name']} — total: {total}/{current_event['goal']}")
+    current_event = None
+    event_baseline = {}
+    event_progress = {}
+
+@tasks.loop(minutes=5)
+async def check_milestone_events():
+    global current_event
+    now = datetime.datetime.utcnow()
+
+    # End event if time is up
+    if current_event and now >= current_event["end"]:
+        await update_milestone_progress()
+        await end_milestone_event()
+        return
+
+    # Update progress if event running
+    if current_event:
+        await update_milestone_progress()
+        return
+
+    # Start new event if it's the right hour (within 5 min window)
+    if now.hour in EVENT_HOURS and now.minute < 5:
+        await start_milestone_event()
+
+
+def save_points_ftp():
+    """Save player_points to FTP as points.json"""
+    try:
+        ftp = ftplib.FTP()
+        ftp.connect(FTP_HOST, 21)
+        ftp.login(FTP_USER, FTP_PASSWORD)
+        ftp.set_pasv(True)
+        data = json.dumps(player_points).encode("utf-8")
+        ftp.storbinary("STOR points.json", io.BytesIO(data))
+        ftp.quit()
+        print("[POINTS] Saved to FTP")
+    except Exception as e:
+        print(f"[POINTS] Save error: {e}")
+
+def load_points_ftp():
+    """Load player_points from FTP"""
+    global player_points
+    try:
+        buf = io.BytesIO()
+        ftp = ftplib.FTP()
+        ftp.connect(FTP_HOST, 21)
+        ftp.login(FTP_USER, FTP_PASSWORD)
+        ftp.set_pasv(True)
+        ftp.retrbinary("RETR points.json", buf.write)
+        ftp.quit()
+        player_points = json.loads(buf.getvalue().decode("utf-8"))
+        print(f"[POINTS] Loaded {len(player_points)} players from FTP")
+    except Exception as e:
+        print(f"[POINTS] Load error (first run?): {e}")
+
+
+# ══════════════════════════════════════════════
+# SHOP
+# ══════════════════════════════════════════════
+SHOP_ITEMS = [
+    {"id": "chunks", "emoji": "⛏️", "name": "+10 Force-loaded Chunks", "cost": 50, "description": "Permanently adds 10 force-loaded chunk slots to your account."},
+    {"id": "homes",  "emoji": "🏠", "name": "+5 Homes",                 "cost": 30, "description": "Permanently adds 5 home slots to your account."},
+    {"id": "star",   "emoji": "⭐", "name": "EventStar Prefix",          "cost": 100, "description": "Adds the ⭐ EventStar prefix to your in-game name."},
+]
+
+class ShopView(discord.ui.View):
+    def __init__(self, mc_name: str, uuid: str):
+        super().__init__(timeout=60)
+        self.mc_name = mc_name
+        self.uuid = uuid
+        for item in SHOP_ITEMS:
+            btn = discord.ui.Button(
+                label=f"{item['emoji']} {item['name']} — {item['cost']} pts",
+                style=discord.ButtonStyle.primary,
+                custom_id=f"shop_{item['id']}"
+            )
+            btn.callback = self.make_callback(item)
+            self.add_item(btn)
+
+    def make_callback(self, item):
+        async def callback(interaction: discord.Interaction):
+            pts = player_points.get(self.uuid, 0)
+            if pts < item["cost"]:
+                await interaction.response.send_message(
+                    f"❌ Not enough points! You have **{pts} pts** but need **{item['cost']} pts**.",
+                    ephemeral=True
+                )
+                return
+
+            # Deduct points
+            player_points[self.uuid] = pts - item["cost"]
+            save_points_ftp()
+
+            # Apply reward via RCON
+            if item["id"] == "chunks":
+                # Get current value and increment
+                current_chunks = 0
+                try:
+                    result = await rcon_async(f"ftbranks node list {self.mc_name}")
+                    for line in result.split("\n"):
+                        if "max_force_loaded" in line:
+                            current_chunks = int(''.join(filter(str.isdigit, line.split("=")[-1])))
+                except:
+                    pass
+                new_val = current_chunks + 10
+                await rcon_async(f"ftbranks node add {self.mc_name} ftbchunks.max_force_loaded {new_val}")
+
+            elif item["id"] == "homes":
+                current_homes = 0
+                try:
+                    result = await rcon_async(f"ftbranks node list {self.mc_name}")
+                    for line in result.split("\n"):
+                        if "home.max" in line:
+                            current_homes = int(''.join(filter(str.isdigit, line.split("=")[-1])))
+                except:
+                    pass
+                new_val = current_homes + 5
+                await rcon_async(f"ftbranks node add {self.mc_name} ftbessentials.home.max {new_val}")
+
+            elif item["id"] == "star":
+                await rcon_async(f"ftbranks node add {self.mc_name} ftbranks.name_format <&e⭐ &f{{name}}&r>")
+
+            await interaction.response.send_message(
+                f"✅ **{item['emoji']} {item['name']}** purchased! Applied in-game.\n"
+                f"You now have **{player_points[self.uuid]} pts** remaining.",
+                ephemeral=True
+            )
+            print(f"[SHOP] {self.mc_name} bought {item['id']} for {item['cost']} pts")
+        return callback
+
+@tree.command(name="shop", description="Spend your event points on rewards", guild=discord.Object(id=GUILD_ID))
+async def shop_command(interaction: discord.Interaction):
+    if interaction.channel_id != CHANNEL_BOT_COMMANDS:
+        await interaction.response.send_message("Please use this command in #bot-commands.", ephemeral=True)
+        return
+
+    discord_id = str(interaction.user.id)
+    mc_name = linked_players.get(discord_id)
+    if not mc_name:
+        await interaction.response.send_message("You haven't linked your Minecraft account yet! Use `/link <username>` first.", ephemeral=True)
+        return
+
+    # Find UUID
+    loop = asyncio.get_event_loop()
+    players = await loop.run_in_executor(None, fetch_all_players)
+    player = next((p for p in players if p["name"].lower() == mc_name.lower()), None)
+    if not player:
+        await interaction.response.send_message(f"Player `{mc_name}` not found on the server.", ephemeral=True)
+        return
+
+    pts = player_points.get(player["uuid"], 0)
+
+    embed = discord.Embed(
+        title="🛒 HubUniverse — Event Shop",
+        description=f"You have **{pts} pts** to spend!\nEarn points by participating in community events.",
+        color=0xF1C40F
+    )
+    for item in SHOP_ITEMS:
+        embed.add_field(
+            name=f"{item['emoji']} {item['name']} — {item['cost']} pts",
+            value=item["description"],
+            inline=False
+        )
+    embed.set_footer(text="Rewards are applied instantly in-game!")
+
+    await interaction.response.send_message(embed=embed, view=ShopView(mc_name, player["uuid"]), ephemeral=True)
+
+# ══════════════════════════════════════════════
 # BOT SETUP
 # ══════════════════════════════════════════════
 intents = discord.Intents.default()
@@ -447,6 +796,8 @@ async def rank_command(interaction: discord.Interaction):
     embed.add_field(name="Current Rank", value=f"**{current['label']}**", inline=True)
     embed.add_field(name="Playtime", value=f"⏱️ {player['playtime_hours']}h", inline=True)
     embed.add_field(name="Quests", value=f"📜 {player['quests']}", inline=True)
+    pts = player_points.get(player["uuid"], 0)
+    embed.add_field(name="🪙 Event Points", value=f"**{pts} pts**", inline=True)
     embed.add_field(name="Progression", value=next_info, inline=False)
     embed.set_thumbnail(url=f"https://minotar.net/avatar/{mc_name}/64")
     await interaction.response.send_message(embed=embed, ephemeral=True)
@@ -645,6 +996,7 @@ async def on_member_join(member: discord.Member):
 async def on_ready():
     print(f"[OK] Bot connected: {bot.user}")
     bot.add_view(RulesView())
+    load_points_ftp()
 
     guild = discord.Object(id=GUILD_ID)
     await tree.sync(guild=guild)
@@ -727,7 +1079,19 @@ async def on_ready():
             value=f"1. Subscribe on Patreon\n2. Link your Discord to Patreon\n3. Use `/link <username>` in <#{CHANNEL_BOT_COMMANDS}>\n4. Your rank will be applied automatically!",
             inline=False
         )
-        ranks_embed.set_footer(text="Use /rank in #bot-commands to check your progression.")
+        ranks_embed.add_field(
+            name="🪙 Event Points Shop",
+            value=(
+                "Earn points by participating in community events (4x/day)!\n"
+                "🥇 1st: **50 pts** · 🥈 2nd: **30 pts** · 🥉 3rd: **15 pts** · Participation: **5 pts**\n\n"
+                "**Spend your points with `/shop`:**\n"
+                "⛏️ +10 force-loaded chunks — **50 pts**\n"
+                "🏠 +5 homes — **30 pts**\n"
+                "⭐ EventStar prefix in-game — **100 pts**"
+            ),
+            inline=False
+        )
+        ranks_embed.set_footer(text="Use /rank to check your progression · /shop to spend your points")
         found = False
         async for msg in ch_ranks.history(limit=10):
             if msg.author == bot.user and not msg.is_system():
@@ -748,6 +1112,9 @@ async def on_ready():
         update_voice_stats.start()
     if not check_weekly_recap.is_running():
         check_weekly_recap.start()
+
+    if not check_milestone_events.is_running():
+        check_milestone_events.start()
 
     print("[OK] All tasks started.")
 
