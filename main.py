@@ -467,7 +467,7 @@ async def update_dashboard():
             embed = build_dashboard_embed(players)
             found = False
             async for msg in ch.history(limit=5):
-                if msg.author == bot.user:
+                if msg.author == bot.user and not msg.is_system():
                     await msg.edit(embed=embed)
                     found = True
                     break
@@ -482,7 +482,7 @@ async def update_dashboard():
             embed_lb = build_leaderboard_embed(players)
             found = False
             async for msg in ch_lb.history(limit=5):
-                if msg.author == bot.user:
+                if msg.author == bot.user and not msg.is_system():
                     await msg.edit(embed=embed_lb)
                     found = True
                     break
@@ -653,7 +653,7 @@ async def on_ready():
         rules_embed.set_footer(text="Click the button below to accept the rules and gain access.")
         found = False
         async for msg in ch_rules.history(limit=10):
-            if msg.author == bot.user:
+            if msg.author == bot.user and not msg.is_system():
                 await msg.edit(embed=rules_embed, view=RulesView())
                 found = True
                 break
@@ -679,7 +679,7 @@ async def on_ready():
         info_embed.set_footer(text="HubUniverse • The center of your Minecraft universe.")
         found = False
         async for msg in ch_info.history(limit=10):
-            if msg.author == bot.user:
+            if msg.author == bot.user and not msg.is_system():
                 await msg.edit(embed=info_embed)
                 found = True
                 break
@@ -715,7 +715,7 @@ async def on_ready():
         ranks_embed.set_footer(text="Use /rank in #bot-commands to check your progression.")
         found = False
         async for msg in ch_ranks.history(limit=10):
-            if msg.author == bot.user:
+            if msg.author == bot.user and not msg.is_system():
                 await msg.edit(embed=ranks_embed)
                 found = True
                 break
