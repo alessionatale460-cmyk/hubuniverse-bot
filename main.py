@@ -644,13 +644,13 @@ async def rank_command(interaction: discord.Interaction):
         await interaction.response.send_message("Please use this command in <#" + str(CHANNEL_BOT_COMMANDS) + ">.", ephemeral=True)
         return
 
+    await interaction.response.defer(ephemeral=True)
+
     discord_id = str(interaction.user.id)
     mc_name = linked_players.get(discord_id)
     if not mc_name:
-        await interaction.response.send_message("You haven't linked your Minecraft account yet! Use `/link <username>` first.", ephemeral=True)
+        await interaction.followup.send("You haven't linked your Minecraft account yet! Use `/link <username>` first.", ephemeral=True)
         return
-
-    await interaction.response.defer(ephemeral=True)
 
     loop = asyncio.get_event_loop()
     players = await loop.run_in_executor(None, fetch_all_players)
@@ -782,16 +782,16 @@ async def shop_command(interaction: discord.Interaction):
         await interaction.response.send_message("Please use this command in <#" + str(CHANNEL_BOT_COMMANDS) + ">.", ephemeral=True)
         return
 
+    await interaction.response.defer(ephemeral=True)
+
     discord_id = str(interaction.user.id)
     mc_name = linked_players.get(discord_id)
     if not mc_name:
-        await interaction.response.send_message(
+        await interaction.followup.send(
             f"You haven't linked your Minecraft account yet!\nUse `/link <username>` first in <#{CHANNEL_BOT_COMMANDS}>.",
             ephemeral=True
         )
         return
-
-    await interaction.response.defer(ephemeral=True)
 
     # Find UUID
     loop = asyncio.get_event_loop()
