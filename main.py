@@ -330,8 +330,10 @@ def rcon_send(command: str) -> str:
         print(f"[RCON ERROR] {e}")
         return ""
 
-def apply_rank(player_name: str, rank: dict):
-    result = rcon_send(f"ftbranks set {player_name} {rank['rank']}")
+def apply_rank(player_name: str, rank: dict, previous_rank: str = None):
+    if previous_rank:
+        rcon_send(f"ftbranks remove {player_name} {previous_rank}")
+    result = rcon_send(f"ftbranks add {player_name} {rank['rank']}")
     print(f"[RCON] Rank '{rank['rank']}' applied to {player_name} — {result}")
 
 def send_welcome_ingame(player_name: str):
@@ -521,7 +523,7 @@ async def check_ranks():
             rank = get_rank_for_hours(p["playtime_hours"])
             current = player_ranks.get(p["uuid"])
             if current != rank["rank"]:
-                apply_rank(p["name"], rank)
+                apply_rank(p["name"], rank, current)
                 player_ranks[p["uuid"]] = rank["rank"]
                 print(f"[RANK] {p['name']} → {rank['rank']} ({p['playtime_hours']}h)")
 
