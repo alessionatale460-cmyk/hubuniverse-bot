@@ -66,13 +66,13 @@ PATREON_WEBHOOK_SECRET = os.getenv("PATREON_WEBHOOK_SECRET", "")
 # RANK MILESTONES (free ranks by playtime)
 # ══════════════════════════════════════════════
 FREE_RANKS = [
-    {"rank": "newcomer",    "hours": 0,  "chunks": 1,   "homes": 1,  "color": 0x95A5A6, "label": "Newcomer",     "prefix": "&7[Newcomer]&r"},
-    {"rank": "player",      "hours": 2,  "chunks": 5,   "homes": 2,  "color": 0x2ECC71, "label": "Player",       "prefix": "&a[Player]&r"},
-    {"rank": "regular",     "hours": 5,  "chunks": 10,  "homes": 3,  "color": 0x3498DB, "label": "Regular",      "prefix": "&9[Regular]&r"},
-    {"rank": "experienced", "hours": 10, "chunks": 15,  "homes": 4,  "color": 0x9B59B6, "label": "Experienced",  "prefix": "&5[Experienced]&r"},
-    {"rank": "veteran",     "hours": 20, "chunks": 20,  "homes": 6,  "color": 0xF39C12, "label": "Veteran",      "prefix": "&6[Veteran]&r"},
-    {"rank": "expert",      "hours": 40, "chunks": 30,  "homes": 10, "color": 0xE74C3C, "label": "Expert",       "prefix": "&c[Expert]&r"},
-    {"rank": "legend_free", "hours": 60, "chunks": 40,  "homes": 999,"color": 0xF1C40F, "label": "Legend",       "prefix": "&e[Legend]&r"},
+    {"rank": "newcomer",    "hours": 0,  "chunks": 1,   "force": 1,  "homes": 1,  "color": 0x95A5A6, "label": "Newcomer",    "prefix": "&7[Newcomer]&r"},
+    {"rank": "player",      "hours": 2,  "chunks": 5,   "force": 2,  "homes": 2,  "color": 0x2ECC71, "label": "Player",      "prefix": "&a[Player]&r"},
+    {"rank": "regular",     "hours": 5,  "chunks": 10,  "force": 4,  "homes": 3,  "color": 0x3498DB, "label": "Regular",     "prefix": "&9[Regular]&r"},
+    {"rank": "experienced", "hours": 10, "chunks": 15,  "force": 6,  "homes": 4,  "color": 0x9B59B6, "label": "Experienced", "prefix": "&5[Experienced]&r"},
+    {"rank": "veteran",     "hours": 20, "chunks": 20,  "force": 8,  "homes": 6,  "color": 0xF39C12, "label": "Veteran",     "prefix": "&6[Veteran]&r"},
+    {"rank": "expert",      "hours": 40, "chunks": 30,  "force": 11, "homes": 10, "color": 0xE74C3C, "label": "Expert",      "prefix": "&c[Expert]&r"},
+    {"rank": "master",      "hours": 60, "chunks": 40,  "force": 15, "homes": 999,"color": 0xF1C40F, "label": "Master",      "prefix": "&e[Master]&r"},
 ]
 
 PREMIUM_RANKS = [
@@ -698,7 +698,7 @@ async def on_ready():
         free_lines = ""
         for r in FREE_RANKS:
             homes = "∞" if r["homes"] == 999 else str(r["homes"])
-            free_lines += f"**{r['label']}** — {r['hours']}h+ | {r['chunks']} chunks | {homes} homes\n"
+            free_lines += f"**{r['label']}** — {r['hours']}h+ | {r['chunks']} chunks | {r['force']} force-loaded | {homes} homes\n"
         ranks_embed.add_field(name="🆓 Free Ranks (by playtime)", value=free_lines, inline=False)
 
         premium_lines = ""
