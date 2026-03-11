@@ -30,6 +30,7 @@ CHANNEL_BOT_COMMANDS   = 1481225021044162600
 CHANNEL_SUGGESTIONS    = 1481225055001383003
 CHANNEL_SUPPORT        = 1481225099175526470
 CHANNEL_EVENTS         = 1481225133682065458
+CHANNEL_EVENT_INFO     = 1481396757475623002
 CHANNEL_MEDIA          = 1481225172039106621
 CHANNEL_SELF_PROMO     = 1481225208470831124
 CHANNEL_DASHBOARD      = 1481225272547086427
@@ -649,7 +650,7 @@ class RulesView(discord.ui.View):
 @tree.command(name="rank", description="Check your current rank and progression", guild=discord.Object(id=GUILD_ID))
 async def rank_command(interaction: discord.Interaction):
     if interaction.channel_id != CHANNEL_BOT_COMMANDS:
-        await interaction.response.send_message("Please use this command in #bot-commands.", ephemeral=True)
+        await interaction.response.send_message("Please use this command in <#" + str(CHANNEL_BOT_COMMANDS) + ">.", ephemeral=True)
         return
 
     discord_id = str(interaction.user.id)
@@ -658,10 +659,13 @@ async def rank_command(interaction: discord.Interaction):
         await interaction.response.send_message("You haven't linked your Minecraft account yet! Use `/link <username>` first.", ephemeral=True)
         return
 
-    players = fetch_all_players()
+    await interaction.response.defer(ephemeral=True)
+
+    loop = asyncio.get_event_loop()
+    players = await loop.run_in_executor(None, fetch_all_players)
     player = next((p for p in players if p["name"].lower() == mc_name.lower()), None)
     if not player:
-        await interaction.response.send_message(f"Player `{mc_name}` not found on the server.", ephemeral=True)
+        await interaction.followup.send(f"Player `{mc_name}` not found on the server.", ephemeral=True)
         return
 
     current = get_rank_for_hours(player["playtime_hours"])
@@ -689,7 +693,7 @@ async def rank_command(interaction: discord.Interaction):
     embed.add_field(name="🪙 Event Points", value=f"**{pts} pts**", inline=True)
     embed.add_field(name="Progression", value=next_info, inline=False)
     embed.set_thumbnail(url=f"https://minotar.net/avatar/{mc_name}/64")
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+    await interaction.followup.send(embed=embed, ephemeral=True)
 
 
 @tree.command(name="link", description="Link your Minecraft username to your Discord account", guild=discord.Object(id=GUILD_ID))
@@ -784,21 +788,26 @@ class ShopView(discord.ui.View):
 @tree.command(name="shop", description="Spend your event points on rewards", guild=discord.Object(id=GUILD_ID))
 async def shop_command(interaction: discord.Interaction):
     if interaction.channel_id != CHANNEL_BOT_COMMANDS:
-        await interaction.response.send_message("Please use this command in #bot-commands.", ephemeral=True)
+        await interaction.response.send_message("Please use this command in <#" + str(CHANNEL_BOT_COMMANDS) + ">.", ephemeral=True)
         return
 
     discord_id = str(interaction.user.id)
     mc_name = linked_players.get(discord_id)
     if not mc_name:
-        await interaction.response.send_message("You haven't linked your Minecraft account yet! Use `/link <username>` first.", ephemeral=True)
+        await interaction.response.send_message(
+            f"You haven't linked your Minecraft account yet!\nUse `/link <username>` first in <#{CHANNEL_BOT_COMMANDS}>.",
+            ephemeral=True
+        )
         return
+
+    await interaction.response.defer(ephemeral=True)
 
     # Find UUID
     loop = asyncio.get_event_loop()
     players = await loop.run_in_executor(None, fetch_all_players)
     player = next((p for p in players if p["name"].lower() == mc_name.lower()), None)
     if not player:
-        await interaction.response.send_message(f"Player `{mc_name}` not found on the server.", ephemeral=True)
+        await interaction.followup.send(f"Player `{mc_name}` not found on the server.", ephemeral=True)
         return
 
     pts = player_points.get(player["uuid"], 0)
@@ -816,7 +825,7 @@ async def shop_command(interaction: discord.Interaction):
         )
     embed.set_footer(text="Rewards are applied instantly in-game!")
 
-    await interaction.response.send_message(embed=embed, view=ShopView(mc_name, player["uuid"]), ephemeral=True)
+    await interaction.followup.send(embed=embed, view=ShopView(mc_name, player["uuid"]), ephemeral=True)
 
 # ══════════════════════════════════════════════
 # TASKS
@@ -1091,7 +1100,7 @@ async def on_ready():
             ),
             inline=False
         )
-        ranks_embed.set_footer(text="Use /rank to check your progression · /shop to spend your points")
+        ranks_embed.set_footer(text="Use /rank and /shop in #bot-commands · Link your account first with /link")
         found = False
         async for msg in ch_ranks.history(limit=10):
             if msg.author == bot.user and not msg.is_system():
@@ -1102,6 +1111,66 @@ async def on_ready():
             msg = await ch_ranks.send(embed=ranks_embed)
             await msg.pin()
         print("[OK] #ranks updated.")
+
+    # Event info embed
+    ch_event_info = bot.get_channel(CHANNEL_EVENT_INFO)
+    if ch_event_info:
+        embed1 = discord.Embed(
+            title="🔗 Step 1 — Link your Minecraft account",
+            description=(
+                f"Before using any feature, you need to link your Minecraft username to your Discord account.\n\n"
+                f"Go to <#{CHANNEL_BOT_COMMANDS}> and type:\n"
+                f"```/link <your_minecraft_username>```\n"
+                f"You only need to do this **once**!"
+            ),
+            color=0x3498DB
+        )
+
+        embed2 = discord.Embed(
+            title="⚔️ Community Events — How it works",
+            description=(
+                "**4 events per day** at **8:00, 14:00, 19:00 and 00:00 UTC**.\n"
+                "Each event lasts **1 hour**. Play together to reach the community goal!\n\n"
+                "**Event types:**\n"
+                "⛏️ **Mining Frenzy** — Mine as many blocks as possible\n"
+                "⚔️ **Monster Hunt** — Kill as many mobs as possible\n"
+                "🔨 **Crafting Rush** — Craft as many items as possible\n\n"
+                "**Points awarded by ranking:**\n"
+                "🥇 1st place — **50 pts**\n"
+                "🥈 2nd place — **30 pts**\n"
+                "🥉 3rd place — **15 pts**\n"
+                "🎮 Participation — **5 pts**\n\n"
+                f"Results are posted in <#{CHANNEL_ANNOUNCEMENTS}> at the end of each event."
+            ),
+            color=0xF1C40F
+        )
+
+        embed3 = discord.Embed(
+            title="🛒 Event Shop — Spend your points",
+            description=(
+                f"Once you've earned points, spend them in <#{CHANNEL_BOT_COMMANDS}> with:\n"
+                f"```/shop```\n"
+                "**Available rewards:**\n\n"
+                "⛏️ **+10 Force-loaded Chunks** — **50 pts**\n"
+                "Permanently adds 10 force-loaded chunk slots to your account.\n\n"
+                "🏠 **+5 Homes** — **30 pts**\n"
+                "Permanently adds 5 home slots to your account.\n\n"
+                "⭐ **EventStar Prefix** — **100 pts**\n"
+                "Adds the ⭐ EventStar prefix to your in-game name.\n\n"
+                "All rewards are **applied instantly in-game** and are **stackable** (buy multiple times)!\n\n"
+                f"Check your points anytime with `/rank` in <#{CHANNEL_BOT_COMMANDS}>."
+            ),
+            color=0x2ECC71
+        )
+        embed3.set_footer(text="HubUniverse — ATM10 · permafrost.dathost.net:17641")
+
+        # Clear old messages and repost
+        await ch_event_info.purge(limit=10, check=lambda m: m.author == bot.user)
+        m1 = await ch_event_info.send(embed=embed1)
+        m2 = await ch_event_info.send(embed=embed2)
+        m3 = await ch_event_info.send(embed=embed3)
+        await m3.pin()
+        print("[OK] #event-info updated.")
 
     # Start loops
     if not update_dashboard.is_running():
