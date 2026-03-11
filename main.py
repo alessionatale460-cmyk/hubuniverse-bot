@@ -530,8 +530,8 @@ async def end_milestone_event():
         awarded[uuid] = pts
     save_points_ftp()
 
-    # Post result in #announcements
-    ch = bot.get_channel(CHANNEL_ANNOUNCEMENTS)
+    # Post result in #events
+    ch = bot.get_channel(CHANNEL_EVENTS)
     if ch:
         medals = ["🥇", "🥈", "🥉"]
         top_lines = ""
@@ -1140,7 +1140,7 @@ async def on_ready():
                 "🥈 2nd place — **30 pts**\n"
                 "🥉 3rd place — **15 pts**\n"
                 "🎮 Participation — **5 pts**\n\n"
-                f"Results are posted in <#{CHANNEL_ANNOUNCEMENTS}> at the end of each event."
+                f"Results are posted in <#{CHANNEL_EVENTS}> at the end of each event."
             ),
             color=0xF1C40F
         )
