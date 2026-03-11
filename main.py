@@ -155,35 +155,15 @@ def fetch_all_players():
             if not uuid:
                 continue
 
-            # Playtime from FTB Ranks data
+            # Playtime + Stats from vanilla stats file
             playtime_hours = 0.0
-            try:
-                buf2 = io.BytesIO()
-                ftp.retrbinary(f"RETR world/ftbranks/players/{uuid}.json", buf2.write)
-                rank_data = json.loads(buf2.getvalue().decode("utf-8", errors="ignore"))
-                playtime_ticks = rank_data.get("playtime", 0)
-                playtime_hours = round(playtime_ticks / 72000, 2)
-            except:
-                pass
-
-            # Quest count from FTB Quests
-            quests = 0
-            try:
-                buf3 = io.BytesIO()
-                ftp.retrbinary(f"RETR world/ftbquests/players/{uuid}/data.json", buf3.write)
-                quest_data = json.loads(buf3.getvalue().decode("utf-8", errors="ignore"))
-                quests = len([q for q in quest_data.get("tasks", []) if quest_data.get("tasks", {}).get(q, {}).get("completed", False)])
-                if quests == 0:
-                    quests = quest_data.get("completed_quests", 0)
-            except:
-                pass
-
-            # Stats
             raw_stats = {}
             try:
                 stats_content = ftp_read(f"world/stats/{uuid}.json")
                 raw = json.loads(stats_content)
                 s = raw.get("stats", {})
+                playtime_ticks = s.get("minecraft:custom", {}).get("minecraft:play_time", 0)
+                playtime_hours = round(playtime_ticks / 72000, 2)
                 raw_stats["deaths"]    = s.get("minecraft:custom", {}).get("minecraft:deaths", 0)
                 raw_stats["mined"]     = sum(s.get("minecraft:mined", {}).values())
                 raw_stats["walked_cm"] = s.get("minecraft:custom", {}).get("minecraft:walk_one_cm", 0)
@@ -191,6 +171,17 @@ def fetch_all_players():
                 raw_stats["mob_kills"] = s.get("minecraft:custom", {}).get("minecraft:mob_kills", 0)
             except:
                 raw_stats = {"deaths": 0, "mined": 0, "walked_cm": 0, "crafted": 0, "mob_kills": 0}
+
+            # Quest count from FTB Quests (.snbt)
+            quests = 0
+            try:
+                import re as _re
+                snbt_content = ftp_read(f"world/ftbquests/{uuid}.snbt")
+                match = _re.search(r'task_progress:\s*\{([^}]*)\}', snbt_content, _re.DOTALL)
+                if match:
+                    quests = len(_re.findall(r'[0-9A-Fa-f]{16}:\s*1L', match.group(1)))
+            except:
+                pass
 
             players.append({
                 "uuid": uuid,
