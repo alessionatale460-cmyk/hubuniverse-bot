@@ -672,7 +672,7 @@ async def on_ready():
         )
         info_embed.add_field(name="🔌 Server IP", value=f"`{os.getenv('MC_HOST', 'coming soon')}`", inline=True)
         info_embed.add_field(name="📦 Modpack", value="[All The Mods 10](https://www.curseforge.com/minecraft/modpacks/all-the-mods-10)", inline=True)
-        info_embed.add_field(name="📜 Quests", value="4,000+ tasks to complete!", inline=True)
+        info_embed.add_field(name="📜 Quests", value="4,536 tasks to complete!", inline=True)
         info_embed.add_field(name="🎖️ Ranks", value=f"Check <#{CHANNEL_RANKS}> for rank progression", inline=True)
         info_embed.add_field(name="💎 Premium", value="Support us on Patreon for exclusive perks!", inline=True)
         info_embed.add_field(name="💬 Discord ↔ Minecraft", value=f"In-game chat is linked to <#{CHANNEL_INGAME_CHAT}>", inline=True)
