@@ -56,7 +56,7 @@ FTP_PASSWORD = os.getenv("FTP_PASSWORD")
 
 # RCON
 RCON_HOST    = os.getenv("RCON_HOST")
-RCON_PORT    = int(os.getenv("RCON_PORT", "25575"))
+RCON_PORT    = int(os.getenv("RCON_PORT") or "25575")
 RCON_PASSWORD= os.getenv("RCON_PASSWORD")
 
 # Patreon
