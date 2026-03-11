@@ -9,6 +9,9 @@ import socket
 import struct
 import datetime
 import asyncio
+import concurrent.futures
+
+rcon_executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
 
 # ══════════════════════════════════════════════
 # CONFIG
@@ -298,7 +301,8 @@ def build_leaderboard_embed(players: list) -> discord.Embed:
 # ══════════════════════════════════════════════
 # RCON
 # ══════════════════════════════════════════════
-def rcon_send(command: str) -> str:
+def rcon_send_sync(command: str) -> str:
+    """Synchronous RCON call — run in executor to avoid blocking the event loop."""
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.settimeout(5)
@@ -330,30 +334,39 @@ def rcon_send(command: str) -> str:
         print(f"[RCON ERROR] {e}")
         return ""
 
-def apply_rank(player_name: str, rank: dict, previous_rank: str = None):
+def rcon_send(command: str) -> str:
+    """Compatibility wrapper — use rcon_send_sync directly in sync contexts."""
+    return rcon_send_sync(command)
+
+async def rcon_async(command: str) -> str:
+    """Non-blocking async RCON call."""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(rcon_executor, rcon_send_sync, command)
+
+async def apply_rank(player_name: str, rank: dict, previous_rank: str = None):
     if previous_rank:
-        rcon_send(f"ftbranks remove {player_name} {previous_rank}")
-    result = rcon_send(f"ftbranks add {player_name} {rank['rank']}")
+        await rcon_async(f"ftbranks remove {player_name} {previous_rank}")
+    result = await rcon_async(f"ftbranks add {player_name} {rank['rank']}")
     print(f"[RCON] Rank '{rank['rank']}' applied to {player_name} — {result}")
 
-def send_welcome_ingame(player_name: str):
-    rcon_send(f'title {player_name} title {{"text":"Welcome to HubUniverse","color":"aqua","bold":true}}')
-    rcon_send(f'title {player_name} subtitle {{"text":"Your adventure begins now.","color":"white"}}')
-    rcon_send(f'title {player_name} times 20 80 20')
-    rcon_send(f'tellraw {player_name} {{"text":"\\n§b§l══════════════════════════","color":"aqua"}}')
-    rcon_send(f'tellraw {player_name} {{"text":"  §f§lWelcome to §b§lHubUniverse§f§l!","bold":true}}')
-    rcon_send(f'tellraw {player_name} {{"text":"  §7All The Mods 10 | The center of your Minecraft universe."}}')
-    rcon_send(f'tellraw {player_name} {{"text":"  §7Use §b/ranks §7to see your progression."}}')
-    rcon_send(f'tellraw {player_name} {{"text":"§b§l══════════════════════════\\n"}}')
+async def send_welcome_ingame(player_name: str):
+    await rcon_async(f'title {player_name} title {{"text":"Welcome to HubUniverse","color":"aqua","bold":true}}')
+    await rcon_async(f'title {player_name} subtitle {{"text":"Your adventure begins now.","color":"white"}}')
+    await rcon_async(f'title {player_name} times 20 80 20')
+    await rcon_async(f'tellraw {player_name} {{"text":"\\n§b§l══════════════════════════","color":"aqua"}}')
+    await rcon_async(f'tellraw {player_name} {{"text":"  §f§lWelcome to §b§lHubUniverse§f§l!","bold":true}}')
+    await rcon_async(f'tellraw {player_name} {{"text":"  §7All The Mods 10 | The center of your Minecraft universe."}}')
+    await rcon_async(f'tellraw {player_name} {{"text":"  §7Use §b/ranks §7to see your progression."}}')
+    await rcon_async(f'tellraw {player_name} {{"text":"§b§l══════════════════════════\\n"}}')
     print(f"[RCON] Welcome sent to {player_name}")
 
-def send_leaderboard_ingame(player_name: str, players: list):
+async def send_leaderboard_ingame(player_name: str, players: list):
     sorted_players = sorted(players, key=lambda x: x["quests"], reverse=True)[:3]
     medals = ["§6§l#1", "§7§l#2", "§c§l#3"]
-    rcon_send(f'tellraw {player_name} {{"text":"§b§l══ 🏆 TOP 3 QUESTS ══"}}')
+    await rcon_async(f'tellraw {player_name} {{"text":"§b§l══ 🏆 TOP 3 QUESTS ══"}}')
     for i, p in enumerate(sorted_players):
-        rcon_send(f'tellraw {player_name} {{"text":"  {medals[i]} §f{p[chr(110)+chr(97)+chr(109)+chr(101)]} §7— §e{p[chr(113)+chr(117)+chr(101)+chr(115)+chr(116)+chr(115)]} quests"}}')
-    rcon_send(f'tellraw {player_name} {{"text":"§b§l═══════════════════"}}')
+        await rcon_async(f'tellraw {player_name} {{"text":"  {medals[i]} §f{p[chr(110)+chr(97)+chr(109)+chr(101)]} §7— §e{p[chr(113)+chr(117)+chr(101)+chr(115)+chr(116)+chr(115)]} quests"}}')
+    await rcon_async(f'tellraw {player_name} {{"text":"§b§l═══════════════════"}}')
 
 # ══════════════════════════════════════════════
 # PLAYER TRACKING
@@ -523,15 +536,15 @@ async def check_ranks():
             rank = get_rank_for_hours(p["playtime_hours"])
             current = player_ranks.get(p["uuid"])
             if current != rank["rank"]:
-                apply_rank(p["name"], rank, current)
+                await apply_rank(p["name"], rank, current)
                 player_ranks[p["uuid"]] = rank["rank"]
                 print(f"[RANK] {p['name']} → {rank['rank']} ({p['playtime_hours']}h)")
 
             if p["uuid"] not in known_players:
                 known_players.add(p["uuid"])
                 if len(known_players) > 1:
-                    send_welcome_ingame(p["name"])
-                    send_leaderboard_ingame(p["name"], players)
+                    await send_welcome_ingame(p["name"])
+                    await send_leaderboard_ingame(p["name"], players)
     except Exception as e:
         print(f"[ERROR] Rank check failed: {e}")
 
@@ -549,7 +562,7 @@ async def update_voice_stats():
             await ch_members.edit(name=f"═══ 👥 {guild.member_count} Members ═══")
 
         # Players online (from RCON)
-        response = rcon_send("list")
+        response = await rcon_async("list")
         online = 0
         if response:
             import re
