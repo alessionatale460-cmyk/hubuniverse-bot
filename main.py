@@ -43,6 +43,7 @@ VOICE_MEMBERS          = 1481228388516757524
 
 # Roles
 ROLE_MEMBER  = int(os.getenv("ROLE_MEMBER", "0"))
+ROLE_MASTER  = int(os.getenv("ROLE_MASTER", "0"))
 ROLE_VIP     = int(os.getenv("ROLE_VIP", "0"))
 ROLE_VIP_PLUS= int(os.getenv("ROLE_VIP_PLUS", "0"))
 ROLE_MVP     = int(os.getenv("ROLE_MVP", "0"))
