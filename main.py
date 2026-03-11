@@ -614,6 +614,100 @@ def load_points_ftp():
 
 
 # ══════════════════════════════════════════════
+# BOT SETUP
+# ══════════════════════════════════════════════
+intents = discord.Intents.default()
+intents.message_content = True
+intents.members = True
+
+bot = commands.Bot(command_prefix="!", intents=intents)
+tree = bot.tree
+
+# ══════════════════════════════════════════════
+# VIEWS
+# ══════════════════════════════════════════════
+class RulesView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="✅ I accept the rules", style=discord.ButtonStyle.success, custom_id="accept_rules_hu")
+    async def accept_rules(self, interaction: discord.Interaction, button: discord.ui.Button):
+        role = interaction.guild.get_role(ROLE_MEMBER)
+        if role and role in interaction.user.roles:
+            await interaction.response.send_message("You've already accepted the rules!", ephemeral=True)
+            return
+        if role:
+            await interaction.user.add_roles(role)
+            await interaction.response.send_message("✅ Rules accepted! Welcome to **HubUniverse** 🌌", ephemeral=True)
+            print(f"[OK] Member role given to {interaction.user.display_name}")
+        else:
+            await interaction.response.send_message("✅ Welcome to **HubUniverse** 🌌", ephemeral=True)
+
+# ══════════════════════════════════════════════
+# SLASH COMMANDS
+# ══════════════════════════════════════════════
+@tree.command(name="rank", description="Check your current rank and progression", guild=discord.Object(id=GUILD_ID))
+async def rank_command(interaction: discord.Interaction):
+    if interaction.channel_id != CHANNEL_BOT_COMMANDS:
+        await interaction.response.send_message("Please use this command in #bot-commands.", ephemeral=True)
+        return
+
+    discord_id = str(interaction.user.id)
+    mc_name = linked_players.get(discord_id)
+    if not mc_name:
+        await interaction.response.send_message("You haven't linked your Minecraft account yet! Use `/link <username>` first.", ephemeral=True)
+        return
+
+    players = fetch_all_players()
+    player = next((p for p in players if p["name"].lower() == mc_name.lower()), None)
+    if not player:
+        await interaction.response.send_message(f"Player `{mc_name}` not found on the server.", ephemeral=True)
+        return
+
+    current = get_rank_for_hours(player["playtime_hours"])
+    current_idx = next((i for i, r in enumerate(FREE_RANKS) if r["rank"] == current["rank"]), 0)
+    next_rank = FREE_RANKS[current_idx + 1] if current_idx + 1 < len(FREE_RANKS) else None
+
+    if next_rank:
+        progress = player["playtime_hours"] - current["hours"]
+        total = next_rank["hours"] - current["hours"]
+        pct = min(int((progress / total) * 20), 20)
+        bar = "█" * pct + "░" * (20 - pct)
+        next_info = f"\n\n**Next rank:** {next_rank['label']} ({next_rank['hours']}h)\n`{bar}` {round(progress,1)}/{total}h"
+    else:
+        next_info = "\n\n🏆 **Maximum rank reached!**"
+
+    embed = discord.Embed(
+        title=f"🎖️ {interaction.user.display_name}'s Rank",
+        color=current["color"]
+    )
+    embed.add_field(name="Minecraft Username", value=f"`{mc_name}`", inline=True)
+    embed.add_field(name="Current Rank", value=f"**{current['label']}**", inline=True)
+    embed.add_field(name="Playtime", value=f"⏱️ {player['playtime_hours']}h", inline=True)
+    embed.add_field(name="Quests", value=f"📜 {player['quests']}", inline=True)
+    pts = player_points.get(player["uuid"], 0)
+    embed.add_field(name="🪙 Event Points", value=f"**{pts} pts**", inline=True)
+    embed.add_field(name="Progression", value=next_info, inline=False)
+    embed.set_thumbnail(url=f"https://minotar.net/avatar/{mc_name}/64")
+    await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+@tree.command(name="link", description="Link your Minecraft username to your Discord account", guild=discord.Object(id=GUILD_ID))
+@app_commands.describe(username="Your Minecraft username")
+async def link_command(interaction: discord.Interaction, username: str):
+    if interaction.channel_id != CHANNEL_BOT_COMMANDS:
+        await interaction.response.send_message("Please use this command in #bot-commands.", ephemeral=True)
+        return
+
+    discord_id = str(interaction.user.id)
+    linked_players[discord_id] = username
+    await interaction.response.send_message(
+        f"✅ Your Discord account is now linked to **{username}**!\nYou can now use `/rank` to check your progression.",
+        ephemeral=True
+    )
+    print(f"[LINK] {interaction.user.display_name} linked to {username}")
+
+# ══════════════════════════════════════════════
 # SHOP
 # ══════════════════════════════════════════════
 SHOP_ITEMS = [
@@ -723,100 +817,6 @@ async def shop_command(interaction: discord.Interaction):
     embed.set_footer(text="Rewards are applied instantly in-game!")
 
     await interaction.response.send_message(embed=embed, view=ShopView(mc_name, player["uuid"]), ephemeral=True)
-
-# ══════════════════════════════════════════════
-# BOT SETUP
-# ══════════════════════════════════════════════
-intents = discord.Intents.default()
-intents.message_content = True
-intents.members = True
-
-bot = commands.Bot(command_prefix="!", intents=intents)
-tree = bot.tree
-
-# ══════════════════════════════════════════════
-# VIEWS
-# ══════════════════════════════════════════════
-class RulesView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    @discord.ui.button(label="✅ I accept the rules", style=discord.ButtonStyle.success, custom_id="accept_rules_hu")
-    async def accept_rules(self, interaction: discord.Interaction, button: discord.ui.Button):
-        role = interaction.guild.get_role(ROLE_MEMBER)
-        if role and role in interaction.user.roles:
-            await interaction.response.send_message("You've already accepted the rules!", ephemeral=True)
-            return
-        if role:
-            await interaction.user.add_roles(role)
-            await interaction.response.send_message("✅ Rules accepted! Welcome to **HubUniverse** 🌌", ephemeral=True)
-            print(f"[OK] Member role given to {interaction.user.display_name}")
-        else:
-            await interaction.response.send_message("✅ Welcome to **HubUniverse** 🌌", ephemeral=True)
-
-# ══════════════════════════════════════════════
-# SLASH COMMANDS
-# ══════════════════════════════════════════════
-@tree.command(name="rank", description="Check your current rank and progression", guild=discord.Object(id=GUILD_ID))
-async def rank_command(interaction: discord.Interaction):
-    if interaction.channel_id != CHANNEL_BOT_COMMANDS:
-        await interaction.response.send_message("Please use this command in #bot-commands.", ephemeral=True)
-        return
-
-    discord_id = str(interaction.user.id)
-    mc_name = linked_players.get(discord_id)
-    if not mc_name:
-        await interaction.response.send_message("You haven't linked your Minecraft account yet! Use `/link <username>` first.", ephemeral=True)
-        return
-
-    players = fetch_all_players()
-    player = next((p for p in players if p["name"].lower() == mc_name.lower()), None)
-    if not player:
-        await interaction.response.send_message(f"Player `{mc_name}` not found on the server.", ephemeral=True)
-        return
-
-    current = get_rank_for_hours(player["playtime_hours"])
-    current_idx = next((i for i, r in enumerate(FREE_RANKS) if r["rank"] == current["rank"]), 0)
-    next_rank = FREE_RANKS[current_idx + 1] if current_idx + 1 < len(FREE_RANKS) else None
-
-    if next_rank:
-        progress = player["playtime_hours"] - current["hours"]
-        total = next_rank["hours"] - current["hours"]
-        pct = min(int((progress / total) * 20), 20)
-        bar = "█" * pct + "░" * (20 - pct)
-        next_info = f"\n\n**Next rank:** {next_rank['label']} ({next_rank['hours']}h)\n`{bar}` {round(progress,1)}/{total}h"
-    else:
-        next_info = "\n\n🏆 **Maximum rank reached!**"
-
-    embed = discord.Embed(
-        title=f"🎖️ {interaction.user.display_name}'s Rank",
-        color=current["color"]
-    )
-    embed.add_field(name="Minecraft Username", value=f"`{mc_name}`", inline=True)
-    embed.add_field(name="Current Rank", value=f"**{current['label']}**", inline=True)
-    embed.add_field(name="Playtime", value=f"⏱️ {player['playtime_hours']}h", inline=True)
-    embed.add_field(name="Quests", value=f"📜 {player['quests']}", inline=True)
-    pts = player_points.get(player["uuid"], 0)
-    embed.add_field(name="🪙 Event Points", value=f"**{pts} pts**", inline=True)
-    embed.add_field(name="Progression", value=next_info, inline=False)
-    embed.set_thumbnail(url=f"https://minotar.net/avatar/{mc_name}/64")
-    await interaction.response.send_message(embed=embed, ephemeral=True)
-
-
-@tree.command(name="link", description="Link your Minecraft username to your Discord account", guild=discord.Object(id=GUILD_ID))
-@app_commands.describe(username="Your Minecraft username")
-async def link_command(interaction: discord.Interaction, username: str):
-    if interaction.channel_id != CHANNEL_BOT_COMMANDS:
-        await interaction.response.send_message("Please use this command in #bot-commands.", ephemeral=True)
-        return
-
-    discord_id = str(interaction.user.id)
-    linked_players[discord_id] = username
-    await interaction.response.send_message(
-        f"✅ Your Discord account is now linked to **{username}**!\nYou can now use `/rank` to check your progression.",
-        ephemeral=True
-    )
-    print(f"[LINK] {interaction.user.display_name} linked to {username}")
 
 # ══════════════════════════════════════════════
 # TASKS
