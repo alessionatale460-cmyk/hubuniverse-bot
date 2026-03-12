@@ -11,7 +11,7 @@ import datetime
 import asyncio
 import concurrent.futures
 
-rcon_executor = concurrent.futures.ThreadPoolExecutor(max_workers=2)
+rcon_executor = concurrent.futures.ThreadPoolExecutor(max_workers=5)
 
 # ══════════════════════════════════════════════
 # CONFIG
@@ -297,7 +297,7 @@ def rcon_send_sync(command: str) -> str:
     """Synchronous RCON call — run in executor to avoid blocking the event loop."""
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.settimeout(5)
+        s.settimeout(8)
         s.connect((RCON_HOST, RCON_PORT))
 
         def send_packet(req_id, req_type, payload):
@@ -308,10 +308,20 @@ def rcon_send_sync(command: str) -> str:
         def recv_packet():
             raw = b""
             while len(raw) < 4:
-                raw += s.recv(4096)
+                chunk = s.recv(4096)
+                if not chunk:
+                    break
+                raw += chunk
+            if len(raw) < 4:
+                return 0, 0, ""
             length = struct.unpack("<i", raw[:4])[0]
             while len(raw) < 4 + length:
-                raw += s.recv(4096)
+                chunk = s.recv(4096)
+                if not chunk:
+                    break
+                raw += chunk
+            if len(raw) < 12:
+                return 0, 0, ""
             req_id, req_type = struct.unpack("<ii", raw[4:12])
             payload = raw[12:4+length-2].decode("utf-8", errors="ignore")
             return req_id, req_type, payload
@@ -332,8 +342,11 @@ def rcon_send(command: str) -> str:
 
 async def rcon_async(command: str) -> str:
     """Non-blocking async RCON call."""
-    loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(rcon_executor, rcon_send_sync, command)
+    loop = asyncio.get_running_loop()
+    return await asyncio.wait_for(
+        loop.run_in_executor(rcon_executor, rcon_send_sync, command),
+        timeout=10
+    )
 
 async def apply_rank(player_name: str, rank: dict, previous_rank: str = None):
     try:
