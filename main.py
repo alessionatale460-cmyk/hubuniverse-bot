@@ -350,14 +350,11 @@ async def rcon_async(command: str) -> str:
 
 async def apply_rank(player_name: str, rank: dict, previous_rank: str = None):
     try:
-        print(f"[RCON DEBUG] Testing RCON connection...")
-        test = await rcon_async("list")
-        print(f"[RCON DEBUG] RCON test result: {repr(test)}")
         if previous_rank:
             result = await rcon_async(f"ftbranks remove {player_name} {previous_rank}")
-            print(f"[RCON] Removed rank '{previous_rank}' from {player_name} — {result}")
+            print(f"[RCON] Removed rank '{previous_rank}' from {player_name}")
         result = await rcon_async(f"ftbranks add {player_name} {rank['rank']}")
-        print(f"[RCON] Rank '{rank['rank']}' applied to {player_name} — {result}")
+        print(f"[RCON] Rank '{rank['rank']}' applied to {player_name}")
         if previous_rank:
             label = rank['label']
             await rcon_async(f'title {player_name} title {{"text":"Rank Up!","color":"gold","bold":true}}')
@@ -913,13 +910,10 @@ async def check_ranks():
     try:
         loop = asyncio.get_event_loop()
         players = await loop.run_in_executor(None, fetch_all_players)
-        print(f"[RANK DEBUG] Found {len(players)} players")
         for p in players:
             rank = get_rank_for_hours(p["playtime_hours"])
             current = player_ranks.get(p["uuid"])
-            print(f"[RANK DEBUG] {p['name']} — {p['playtime_hours']}h — current: {current} — should be: {rank['rank']}")
             if current != rank["rank"]:
-                print(f"[RANK DEBUG] Calling apply_rank for {p['name']}...")
                 await apply_rank(p["name"], rank, current)
                 player_ranks[p["uuid"]] = rank["rank"]
                 print(f"[RANK] {p['name']} → {rank['rank']} ({p['playtime_hours']}h)")
