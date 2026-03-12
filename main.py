@@ -904,6 +904,7 @@ async def check_ranks():
             current = player_ranks.get(p["uuid"])
             print(f"[RANK DEBUG] {p['name']} — {p['playtime_hours']}h — current: {current} — should be: {rank['rank']}")
             if current != rank["rank"]:
+                print(f"[RANK DEBUG] Calling apply_rank for {p['name']}...")
                 await apply_rank(p["name"], rank, current)
                 player_ranks[p["uuid"]] = rank["rank"]
                 print(f"[RANK] {p['name']} → {rank['rank']} ({p['playtime_hours']}h)")
