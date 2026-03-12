@@ -340,6 +340,13 @@ async def apply_rank(player_name: str, rank: dict, previous_rank: str = None):
         await rcon_async(f"ftbranks remove {player_name} {previous_rank}")
     result = await rcon_async(f"ftbranks add {player_name} {rank['rank']}")
     print(f"[RCON] Rank '{rank['rank']}' applied to {player_name} — {result}")
+    # Notify player in-game
+    if previous_rank:
+        label = rank['label']
+        await rcon_async(f'title {player_name} title {{"text":"Rank Up!","color":"gold","bold":true}}')
+        await rcon_async(f'title {player_name} subtitle {{"text":"You are now {label}","color":"aqua"}}')
+        await rcon_async(f'title {player_name} times 20 80 20')
+        await rcon_async(f'tellraw {player_name} {{"text":"§6§l★ Rank Up! §eYou are now §b{label}§e. Keep playing to unlock more perks!"}}')
 
 async def send_welcome_ingame(player_name: str):
     await rcon_async(f'title {player_name} title {{"text":"Welcome to HubUniverse","color":"aqua","bold":true}}')
