@@ -895,9 +895,11 @@ async def check_ranks():
     try:
         loop = asyncio.get_event_loop()
         players = await loop.run_in_executor(None, fetch_all_players)
+        print(f"[RANK DEBUG] Found {len(players)} players")
         for p in players:
             rank = get_rank_for_hours(p["playtime_hours"])
             current = player_ranks.get(p["uuid"])
+            print(f"[RANK DEBUG] {p['name']} — {p['playtime_hours']}h — current: {current} — should be: {rank['rank']}")
             if current != rank["rank"]:
                 await apply_rank(p["name"], rank, current)
                 player_ranks[p["uuid"]] = rank["rank"]
