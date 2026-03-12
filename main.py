@@ -706,7 +706,7 @@ async def link_command(interaction: discord.Interaction, username: str):
 # SHOP
 # ══════════════════════════════════════════════
 SHOP_ITEMS = [
-    {"id": "chunks", "emoji": "⛏️", "name": "+10 Force-loaded Chunks", "cost": 50, "description": "Permanently adds 10 force-loaded chunk slots to your account."},
+    {"id": "chunks", "emoji": "⛏️", "name": "+2 Force-loaded Chunks", "cost": 50, "description": "Permanently adds 2 force-loaded chunk slots to your account."},
     {"id": "homes",  "emoji": "🏠", "name": "+5 Homes",                 "cost": 30, "description": "Permanently adds 5 home slots to your account."},
     {"id": "star",   "emoji": "⭐", "name": "EventStar Prefix",          "cost": 100, "description": "Adds the ⭐ EventStar prefix to your in-game name."},
 ]
@@ -750,7 +750,7 @@ class ShopView(discord.ui.View):
                             current_chunks = int(''.join(filter(str.isdigit, line.split("=")[-1])))
                 except:
                     pass
-                new_val = current_chunks + 10
+                new_val = current_chunks + 2
                 await rcon_async(f"ftbranks node add {self.mc_name} ftbchunks.max_force_loaded {new_val}")
 
             elif item["id"] == "homes":
@@ -1060,7 +1060,7 @@ async def on_ready():
     if ch_ranks:
         ranks_embed = discord.Embed(
             title="🎖️ HubUniverse — Rank System",
-            description="Progress through ranks by playing! Premium ranks are available via Patreon.",
+            description="Progress through ranks by playing on the server!",
             color=0x00B4D8
         )
         free_lines = ""
@@ -1068,29 +1068,6 @@ async def on_ready():
             homes = "∞" if r["homes"] == 999 else str(r["homes"])
             free_lines += f"**{r['label']}** — {r['hours']}h+ | {r['chunks']} chunks | {r['force']} force-loaded | {homes} homes\n"
         ranks_embed.add_field(name="🆓 Free Ranks (by playtime)", value=free_lines, inline=False)
-
-        premium_lines = ""
-        for r in PREMIUM_RANKS:
-            homes = "∞" if r["homes"] == 999 else str(r["homes"])
-            premium_lines += f"**{r['tier']}** — {r['price']} | {r['chunks']} chunks | {r['force']} force-loaded | {homes} homes\n"
-        ranks_embed.add_field(name="💎 Premium Ranks (Patreon)", value=premium_lines, inline=False)
-        ranks_embed.add_field(
-            name="🔗 How to get a premium rank?",
-            value=f"1. Subscribe on Patreon\n2. Link your Discord to Patreon\n3. Use `/link <username>` in <#{CHANNEL_BOT_COMMANDS}>\n4. Your rank will be applied automatically!",
-            inline=False
-        )
-        ranks_embed.add_field(
-            name="🪙 Event Points Shop",
-            value=(
-                "Earn points by participating in community events (4x/day)!\n"
-                "🥇 1st: **50 pts** · 🥈 2nd: **30 pts** · 🥉 3rd: **15 pts** · Participation: **5 pts**\n\n"
-                "**Spend your points with `/shop`:**\n"
-                "⛏️ +10 force-loaded chunks — **50 pts**\n"
-                "🏠 +5 homes — **30 pts**\n"
-                "⭐ EventStar prefix in-game — **100 pts**"
-            ),
-            inline=False
-        )
         ranks_embed.set_footer(text="Use /rank and /shop in #bot-commands · Link your account first with /link")
         found = False
         async for msg in ch_ranks.history(limit=10):
