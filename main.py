@@ -734,48 +734,51 @@ class ShopView(discord.ui.View):
 
     def make_callback(self, item):
         async def callback(interaction: discord.Interaction):
+            await interaction.response.defer(ephemeral=True)
+
             pts = player_points.get(self.uuid, 0)
             if pts < item["cost"]:
-                await interaction.response.send_message(
+                await interaction.followup.send(
                     f"❌ Not enough points! You have **{pts} pts** but need **{item['cost']} pts**.",
                     ephemeral=True
                 )
                 return
 
-            # Deduct points
+            # Apply reward via RCON FIRST, deduct points only on success
+            try:
+                if item["id"] == "chunks":
+                    # Track purchases to avoid reading node list (unreliable)
+                    purchase_key = f"{self.uuid}_chunks"
+                    purchases = player_points.get(purchase_key, 0)
+                    base_chunks = next(r["force"] for r in FREE_RANKS if r["rank"] == player_ranks.get(self.uuid, "newcomer"))
+                    new_val = base_chunks + (purchases + 1) * 2
+                    await rcon_async(f"ftbranks node add {self.mc_name} ftbchunks.max_force_loaded {new_val}")
+                    player_points[purchase_key] = purchases + 1
+
+                elif item["id"] == "homes":
+                    purchase_key = f"{self.uuid}_homes"
+                    purchases = player_points.get(purchase_key, 0)
+                    base_homes = next(r["homes"] for r in FREE_RANKS if r["rank"] == player_ranks.get(self.uuid, "newcomer"))
+                    new_val = base_homes + (purchases + 1) * 5
+                    await rcon_async(f"ftbranks node add {self.mc_name} ftbessentials.home.max {new_val}")
+                    player_points[purchase_key] = purchases + 1
+
+                elif item["id"] == "star":
+                    await rcon_async(f"ftbranks node add {self.mc_name} ftbranks.name_format <&e⭐ &f{{name}}&r>")
+
+            except Exception as e:
+                print(f"[SHOP] RCON error for {self.mc_name}: {e}")
+                await interaction.followup.send(
+                    f"❌ An error occurred applying your reward. Your points were **not** deducted. Please try again.",
+                    ephemeral=True
+                )
+                return
+
+            # Deduct points only after successful RCON
             player_points[self.uuid] = pts - item["cost"]
             save_points_ftp()
 
-            # Apply reward via RCON
-            if item["id"] == "chunks":
-                # Get current value and increment
-                current_chunks = 0
-                try:
-                    result = await rcon_async(f"ftbranks node list {self.mc_name}")
-                    for line in result.split("\n"):
-                        if "max_force_loaded" in line:
-                            current_chunks = int(''.join(filter(str.isdigit, line.split("=")[-1])))
-                except:
-                    pass
-                new_val = current_chunks + 2
-                await rcon_async(f"ftbranks node add {self.mc_name} ftbchunks.max_force_loaded {new_val}")
-
-            elif item["id"] == "homes":
-                current_homes = 0
-                try:
-                    result = await rcon_async(f"ftbranks node list {self.mc_name}")
-                    for line in result.split("\n"):
-                        if "home.max" in line:
-                            current_homes = int(''.join(filter(str.isdigit, line.split("=")[-1])))
-                except:
-                    pass
-                new_val = current_homes + 5
-                await rcon_async(f"ftbranks node add {self.mc_name} ftbessentials.home.max {new_val}")
-
-            elif item["id"] == "star":
-                await rcon_async(f"ftbranks node add {self.mc_name} ftbranks.name_format <&e⭐ &f{{name}}&r>")
-
-            await interaction.response.send_message(
+            await interaction.followup.send(
                 f"✅ **{item['emoji']} {item['name']}** purchased! Applied in-game.\n"
                 f"You now have **{player_points[self.uuid]} pts** remaining.",
                 ephemeral=True
