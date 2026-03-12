@@ -71,7 +71,7 @@ PATREON_WEBHOOK_SECRET = os.getenv("PATREON_WEBHOOK_SECRET", "")
 # RANK MILESTONES (free ranks by playtime)
 # ══════════════════════════════════════════════
 FREE_RANKS = [
-    {"rank": "newcomer",    "hours": 0,  "chunks": 1,   "force": 1,  "homes": 1,  "color": 0x95A5A6, "label": "Newcomer",    "prefix": "&7[Newcomer]&r"},
+    {"rank": "member",      "hours": 0,  "chunks": 1,   "force": 1,  "homes": 1,  "color": 0x95A5A6, "label": "Member",      "prefix": "&7[Newcomer]&r"},
     {"rank": "player",      "hours": 2,  "chunks": 5,   "force": 2,  "homes": 2,  "color": 0x2ECC71, "label": "Player",      "prefix": "&a[Player]&r"},
     {"rank": "regular",     "hours": 5,  "chunks": 10,  "force": 4,  "homes": 3,  "color": 0x3498DB, "label": "Regular",     "prefix": "&9[Regular]&r"},
     {"rank": "experienced", "hours": 10, "chunks": 15,  "force": 6,  "homes": 4,  "color": 0x9B59B6, "label": "Experienced", "prefix": "&5[Experienced]&r"},
@@ -768,7 +768,7 @@ class ShopView(discord.ui.View):
                     # Track purchases to avoid reading node list (unreliable)
                     purchase_key = f"{self.uuid}_chunks"
                     purchases = player_points.get(purchase_key, 0)
-                    base_chunks = next(r["force"] for r in FREE_RANKS if r["rank"] == player_ranks.get(self.uuid, "newcomer"))
+                    base_chunks = next(r["force"] for r in FREE_RANKS if r["rank"] == player_ranks.get(self.uuid, "member"))
                     new_val = base_chunks + (purchases + 1) * 2
                     await rcon_async(f"ftbranks node add {self.mc_name} ftbchunks.max_force_loaded {new_val}")
                     player_points[purchase_key] = purchases + 1
@@ -776,7 +776,7 @@ class ShopView(discord.ui.View):
                 elif item["id"] == "homes":
                     purchase_key = f"{self.uuid}_homes"
                     purchases = player_points.get(purchase_key, 0)
-                    base_homes = next(r["homes"] for r in FREE_RANKS if r["rank"] == player_ranks.get(self.uuid, "newcomer"))
+                    base_homes = next(r["homes"] for r in FREE_RANKS if r["rank"] == player_ranks.get(self.uuid, "member"))
                     new_val = base_homes + (purchases + 1) * 5
                     await rcon_async(f"ftbranks node add {self.mc_name} ftbessentials.home.max {new_val}")
                     player_points[purchase_key] = purchases + 1
