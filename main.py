@@ -102,7 +102,7 @@ def get_rank_for_hours(hours: float) -> dict:
 # ══════════════════════════════════════════════
 def ftp_read(path: str) -> str:
     ftp = ftplib.FTP()
-    ftp.connect(FTP_HOST, 21)
+    ftp.connect(FTP_HOST, 21, timeout=10)
     ftp.login(FTP_USER, FTP_PASSWORD)
     ftp.set_pasv(True)
     buf = io.BytesIO()
@@ -137,7 +137,7 @@ def fetch_all_players():
     players = []
     try:
         ftp = ftplib.FTP()
-        ftp.connect(FTP_HOST, 21)
+        ftp.connect(FTP_HOST, 21, timeout=10)
         ftp.login(FTP_USER, FTP_PASSWORD)
         ftp.set_pasv(True)
 
@@ -835,7 +835,8 @@ async def shop_command(interaction: discord.Interaction):
 async def update_dashboard():
     print(f"[INFO] Dashboard update ({datetime.datetime.utcnow().strftime('%H:%M')})...")
     try:
-        players = fetch_all_players()
+        loop = asyncio.get_event_loop()
+        players = await loop.run_in_executor(None, fetch_all_players)
 
         # Dashboard
         ch = bot.get_channel(CHANNEL_DASHBOARD)
@@ -892,7 +893,8 @@ async def update_dashboard():
 async def check_ranks():
     print("[INFO] Checking ranks...")
     try:
-        players = fetch_all_players()
+        loop = asyncio.get_event_loop()
+        players = await loop.run_in_executor(None, fetch_all_players)
         for p in players:
             rank = get_rank_for_hours(p["playtime_hours"])
             current = player_ranks.get(p["uuid"])
@@ -943,7 +945,8 @@ async def check_weekly_recap():
     now = datetime.datetime.utcnow()
     if now.weekday() == 6 and now.hour == 20:
         try:
-            players = fetch_all_players()
+            loop = asyncio.get_event_loop()
+            players = await loop.run_in_executor(None, fetch_all_players)
             if not players:
                 return
             best_quests = max(players, key=lambda x: x["quests"])
