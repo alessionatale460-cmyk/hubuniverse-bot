@@ -337,12 +337,14 @@ async def rcon_async(command: str) -> str:
 
 async def apply_rank(player_name: str, rank: dict, previous_rank: str = None):
     try:
+        print(f"[RCON DEBUG] Testing RCON connection...")
+        test = await rcon_async("list")
+        print(f"[RCON DEBUG] RCON test result: {repr(test)}")
         if previous_rank:
             result = await rcon_async(f"ftbranks remove {player_name} {previous_rank}")
             print(f"[RCON] Removed rank '{previous_rank}' from {player_name} — {result}")
         result = await rcon_async(f"ftbranks add {player_name} {rank['rank']}")
         print(f"[RCON] Rank '{rank['rank']}' applied to {player_name} — {result}")
-        # Notify player in-game
         if previous_rank:
             label = rank['label']
             await rcon_async(f'title {player_name} title {{"text":"Rank Up!","color":"gold","bold":true}}')
